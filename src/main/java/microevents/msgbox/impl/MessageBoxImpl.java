@@ -20,6 +20,8 @@ import org.msgpack.value.impl.ImmutableStringValueImpl;
 
 import microevents.msgbox.MessageBox;
 import microevents.msgbox.MessageConstants;
+import microevents.msgbox.MessageFactory;
+import microevents.msgbox.MessageValue;
 import microevents.msgbox.support.MessageBoxException;
 
 /**
@@ -34,7 +36,197 @@ import microevents.msgbox.support.MessageBoxException;
 public class MessageBoxImpl implements MessageBox {
 
 	private final Map<String, String> header = new HashMap<String, String>();
-	private final Map<String, byte[]> body = new HashMap<String, byte[]>();
+	private final Map<String, Payload> body = new HashMap<String, Payload>();
+
+	interface Payload {
+		
+		/**
+		 * Get bytes of the payload
+		 * 
+		 * @param copy - copy bytes if needed
+		 * @return bytes
+		 */
+		
+		byte[] getBytes(boolean copy);
+		
+		/**
+		 * Converts payload to utf-8 string
+		 * 
+		 * @return string
+		 */
+		
+		String toUtf8();
+		
+		/**
+		 * Converts payload to message value
+		 * 
+		 * @return message value
+		 */
+		
+		MessageValue<?> toMessageValue();
+		
+		/**
+		 * Converts to message pack value
+		 * 
+		 * @return value
+		 */
+		
+		Value toValue();
+		
+		/**
+		 * Writes payload to packer
+		 * 
+		 * @param packer - message packer
+		 * @throws IOException
+		 */
+		
+		void writeTo(MessagePacker packer) throws IOException;
+		
+	}
+	
+	/**
+	 * Binary payload implementation
+	 * 
+	 * @author Alex Shvid
+	 *
+	 */
+	
+	private static final class BinaryPayload implements Payload {
+		
+		private final byte[] value;
+		
+		public BinaryPayload(MessageUnpacker unpacker) throws IOException {
+     	int length = unpacker.unpackBinaryHeader();
+     	this.value = new byte[length];
+     	unpacker.readPayload(value);
+		}
+		
+		public BinaryPayload(byte[] payload, boolean copy) {
+			this.value = copy ? Arrays.copyOf(payload, payload.length) : payload;
+		}
+
+		@Override
+		public byte[] getBytes(boolean copy) {
+			 return copy ? Arrays.copyOf(value, value.length) : value;
+		}
+		
+		@Override
+		public String toUtf8() {
+			return new String(value, StandardCharsets.UTF_8);
+		}
+
+		@Override
+		public MessageValue<?> toMessageValue() {
+			return new MessageStringImpl(value, false);
+		}
+
+		@Override
+		public Value toValue() {
+			return new ImmutableBinaryValueImpl(value);
+		}
+
+		@Override
+		public void writeTo(MessagePacker packer) throws IOException {
+    	packer.packBinaryHeader(value.length);
+    	packer.writePayload(value);
+		}
+
+	}
+	
+	/**
+	 * Utf8 payload implementation
+	 * 
+	 * @author Alex Shvid
+	 *
+	 */
+	
+	private static final class Utf8Payload implements Payload {
+		
+		private final String value;
+		
+		public Utf8Payload(MessageUnpacker unpacker) throws IOException {
+     	int length = unpacker.unpackRawStringHeader();
+     	byte[] bytes = new byte[length];
+     	unpacker.readPayload(bytes);
+     	this.value = new String(bytes, StandardCharsets.UTF_8);
+		}
+		
+		public Utf8Payload(String payload) {
+			this.value = payload;
+		}
+		
+		@Override
+		public byte[] getBytes(boolean copy) {
+			return value.getBytes(StandardCharsets.UTF_8);
+		}
+
+		@Override
+		public String toUtf8() {
+			return value;
+		}
+		
+		@Override
+		public MessageValue<?> toMessageValue() {
+			return new MessageStringImpl(value);
+		}
+
+		@Override
+		public Value toValue() {
+			return new ImmutableStringValueImpl(value);
+		}
+
+		@Override
+		public void writeTo(MessagePacker packer) throws IOException {
+    	packer.packString(value);
+		}
+		
+	}
+	
+	/**
+	 * Message value payload implementation
+	 * 
+	 * @author Alex Shvid
+	 *
+	 */
+	
+	private static final class MessageValuePayload implements Payload {
+		
+		private final MessageValue<?> value;
+		
+		public MessageValuePayload(MessageUnpacker unpacker) throws IOException {
+			this.value = MessageFactory.newValue(unpacker);
+		}
+		
+		public MessageValuePayload(MessageValue<?> payload) {
+			this.value = payload;
+		}
+		
+		@Override
+		public byte[] getBytes(boolean copy) {
+			return value.toByteArray();
+		}
+
+		@Override
+		public String toUtf8() {
+			return value.asString();
+		}
+		
+		@Override
+		public MessageValue<?> toMessageValue() {
+			return value;
+		}
+
+		@Override
+		public Value toValue() {
+			return value.toValue();
+		}
+
+		@Override
+		public void writeTo(MessagePacker packer) throws IOException {
+			value.writeTo(packer);
+		}
+		
+	}
 	
 	public MessageBoxImpl() {
 	}
@@ -171,13 +363,38 @@ public class MessageBoxImpl implements MessageBox {
     	
      	String key = unpacker.unpackString();
      	
-     	int length = unpacker.unpackBinaryHeader();
-     	byte[] value = new byte[length];
-     	unpacker.readPayload(value);
+     	Payload payload = parsePayload(unpacker);
      	
-     	body.put(key, value);
+     	if (payload != null) {
+     		body.put(key, payload);
+     	}
      	
     }
+		
+	}
+	
+	private Payload parsePayload(MessageUnpacker unpacker) throws IOException {
+		
+		if(!unpacker.hasNext()) { 
+			return null;
+		}
+		
+		MessageFormat format = unpacker.getNextFormat();
+		
+		if (isNull(format)) {
+			unpacker.unpackNil();
+			return null;
+		}
+		
+		if (isBinary(format)) {
+			return new BinaryPayload(unpacker);
+		}
+		
+		if (isUtf8(format)) {
+			return new Utf8Payload(unpacker);
+		}
+		
+		return new MessageValuePayload(unpacker);
 		
 	}
 	
@@ -200,6 +417,40 @@ public class MessageBoxImpl implements MessageBox {
 		}
 
 	}
+	
+	private static boolean isBinary(MessageFormat format) {
+
+		switch (format) {
+
+		case BIN8:
+		case BIN16:
+		case BIN32:
+			return true;
+
+		default:
+			return false;
+
+		}
+
+	}
+	
+	private static boolean isUtf8(MessageFormat format) {
+
+		switch (format) {
+
+		case FIXSTR:
+		case STR8:
+		case STR16:
+		case STR32:
+			return true;
+
+		default:
+			return false;
+
+		}
+
+	}
+	
 	
 	@Override
 	public boolean isEmpty() {
@@ -226,11 +477,22 @@ public class MessageBoxImpl implements MessageBox {
 	public Set<String> getHeaderKeys() {
 		return header.keySet();
 	}
+	
+	@Override
+	public MessageBox addPayload(String key, MessageValue<?> payload) {
+		if (payload != null) {
+			body.put(key, new MessageValuePayload(payload));
+		}
+		else {
+			body.remove(key);
+		}
+		return this;
+	}
 
 	@Override
 	public MessageBox addPayload(String key, byte[] payload, boolean copy) {
 		if (payload != null) {
-			body.put(key, copy ? Arrays.copyOf(payload, payload.length) : payload);
+			body.put(key, new BinaryPayload(payload, copy));
 		}
 		else {
 			body.remove(key);
@@ -241,27 +503,36 @@ public class MessageBoxImpl implements MessageBox {
 	@Override
 	public MessageBox addPayloadUtf8(String key, String payload) {
 		if (payload != null) {
-			body.put(key, payload.getBytes(StandardCharsets.UTF_8));
+			body.put(key, new Utf8Payload(payload));
 		}
 		else {
 			body.remove(key);
 		}
 		return this;
 	}
+	
+	@SuppressWarnings("unchecked")
+	@Override
+	public <T extends MessageValue<?>> T getTypedPayload(String key) {
+		return (T) getPayload(key);
+	}
+
+	@Override
+	public MessageValue<?> getPayload(String key) {
+		Payload payload = body.get(key);
+		return payload != null ? payload.toMessageValue() : null;
+	}
 
 	@Override
 	public byte[] getPayload(String key, boolean copy) {
-		byte[] payload =  body.get(key);
-		return copy && payload != null ? Arrays.copyOf(payload, payload.length) : payload;
+		Payload payload = body.get(key);
+		return payload != null ? payload.getBytes(copy) : null;
 	}
 
 	@Override
 	public String getPayloadUtf8(String key) {
-		byte[] payload = body.get(key);
-		if (payload != null) {
-			return new String(payload, StandardCharsets.UTF_8);
-		}
-		return null;
+		Payload payload = body.get(key);
+		return payload != null ? payload.toUtf8() : null;
 	}
 	
 	@Override
@@ -339,13 +610,13 @@ public class MessageBoxImpl implements MessageBox {
 		int index = 0;
     Value[] array = new Value[body.size()  * 2];
     
-    for (Map.Entry<String, byte[]> entry : body.entrySet()) {
+    for (Map.Entry<String, Payload> entry : body.entrySet()) {
     	
     	String key = entry.getKey();
-    	byte[] value = entry.getValue();
+    	Payload payload = entry.getValue();
     	
       array[index++] = new ImmutableStringValueImpl(key);
-      array[index++] = new ImmutableBinaryValueImpl(value);
+      array[index++] = payload.toValue();
     }
     
     return new ImmutableMapValueImpl(array);
@@ -399,14 +670,13 @@ public class MessageBoxImpl implements MessageBox {
     
     packer.packMapHeader(size);
     
-    for (Map.Entry<String, byte[]> entry : body.entrySet()) {
+    for (Map.Entry<String, Payload> entry : body.entrySet()) {
     	
     	String key = entry.getKey();
-    	byte[] value = entry.getValue();
+    	Payload payload = entry.getValue();
     	
     	packer.packString(key);
-    	packer.packBinaryHeader(value.length);
-    	packer.writePayload(value);
+    	payload.writeTo(packer);
     	
     }
     

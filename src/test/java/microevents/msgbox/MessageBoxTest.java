@@ -6,6 +6,8 @@ import java.util.Arrays;
 import org.junit.Assert;
 import org.junit.Test;
 
+import microevents.msgbox.impl.MessageTableImpl;
+
 
 /**
  * MessageBoxTest
@@ -21,7 +23,7 @@ public class MessageBoxTest {
 	@Test
 	public void testEmpty() {
 		
-		MessageBox message = MessageFactory.newMessage();
+		MessageBox message = MessageFactory.newBox();
 		
 		Assert.assertTrue(message.isEmpty());
 
@@ -31,7 +33,7 @@ public class MessageBoxTest {
 		String json = message.toJson();
 		Assert.assertEquals("{}", json);
 		
-		MessageBox actual = MessageFactory.parseMessage(msgpack);
+		MessageBox actual = MessageFactory.parseBox(msgpack);
 		Assert.assertTrue(actual.isEmpty());
 		
 	}
@@ -41,7 +43,7 @@ public class MessageBoxTest {
 		
 		String payload = "{}";
 		
-		MessageBox message = MessageFactory.newMessage();
+		MessageBox message = MessageFactory.newBox();
 		
 		message
 		.addHeader("id", "123")
@@ -55,7 +57,7 @@ public class MessageBoxTest {
 		String json = message.toJson();
 		//System.out.println("json = " + json);
 		
-		MessageBox actual = MessageFactory.parseMessage(msgpack);
+		MessageBox actual = MessageFactory.parseBox(msgpack);
 		Assert.assertFalse(actual.isEmpty());
 		
 		Assert.assertEquals(message.getHeader("id"), actual.getHeader("id"));
@@ -71,7 +73,7 @@ public class MessageBoxTest {
 		
 		byte[] payload = "{}".getBytes(StandardCharsets.UTF_8);
 		
-		MessageBox message = MessageFactory.newMessage();
+		MessageBox message = MessageFactory.newBox();
 		
 		message
 		.addHeader("id", "123")
@@ -86,7 +88,7 @@ public class MessageBoxTest {
 		String json = message.toJson();
 		//System.out.println("json = " + json);
 		
-		MessageBox actual = MessageFactory.parseMessage(msgpack);
+		MessageBox actual = MessageFactory.parseBox(msgpack);
 		Assert.assertFalse(actual.isEmpty());
 		
 		Assert.assertEquals(message.getHeader("id"), actual.getHeader("id"));
@@ -97,6 +99,39 @@ public class MessageBoxTest {
 		
 	}
 	
+	@Test
+	public void testMessageValue() {
+		
+		MessageTable payload = new MessageTableImpl();
+		
+		payload.put("name", "Bob");
+		payload.put("age", "45");
+		
+		MessageBox message = MessageFactory.newBox();
+		
+		message
+		.addHeader("id", "123")
+		.addHeader("url", "www")
+		.addPayload("payload", payload);
+		
+		byte[] msgpack = message.toByteArray();
+		//System.out.println("msgpack = " + Arrays.toString(msgpack));
+		
+		String json = message.toJson();
+		//System.out.println("json = " + json);
+		
+		MessageBox actual = MessageFactory.parseBox(msgpack);
+		Assert.assertFalse(actual.isEmpty());
+		
+		Assert.assertEquals(message.getHeader("id"), actual.getHeader("id"));
+		Assert.assertEquals(message.getHeader("url"), actual.getHeader("url"));
+		
+		MessageTable actualPayload = actual.getTypedPayload("payload");
+
+		Assert.assertEquals(payload.get("name"), actualPayload.get("name"));
+		Assert.assertEquals(payload.get("age"), actualPayload.get("age"));
+
+	}
 	
 	
 }

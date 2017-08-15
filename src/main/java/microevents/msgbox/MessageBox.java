@@ -52,6 +52,16 @@ public interface MessageBox {
 	 * Adds payload to the message
 	 * 
 	 * @param key - name of the payload
+	 * @param payload - message value
+	 * @return this
+	 */
+	
+	MessageBox addPayload(String key, MessageValue<?> payload);
+	
+	/**
+	 * Adds payload to the message
+	 * 
+	 * @param key - name of the payload
 	 * @param payload - byte array
 	 * @param copy - copy if needed
 	 * @return this
@@ -68,6 +78,24 @@ public interface MessageBox {
 	 */
 	
 	MessageBox addPayloadUtf8(String key, String payload);
+	
+	/**
+	 * Gets typed payload
+	 * 
+	 * @param key - payload key
+	 * @return null or payload value
+	 */
+	
+	<T extends MessageValue<?>> T getTypedPayload(String key);
+	
+	/**
+	 * Gets payload
+	 * 
+	 * @param key - payload key
+	 * @return null or payload value
+	 */
+	
+	MessageValue<?> getPayload(String key);
 	
 	/**
 	 * Gets payload

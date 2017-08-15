@@ -36,25 +36,25 @@ public final class MessageFactory {
 	 * @return not null instance
 	 */
 	
-	public static final MessageBox newMessage() {
+	public static final MessageBox newBox() {
 		return new MessageBoxImpl();
 	}
 	
 	/**
-	 * Creates a STEP message from serialized MsgPack blob
+	 * Creates a message from serialized MsgPack blob
 	 * 
 	 * @param blob - input buffer
 	 * 
 	 * @return not null instance
 	 */
 	
-	public static final MessageBox parseMessage(byte[] blob) {
+	public static final MessageBox parseBox(byte[] blob) {
 		return new MessageBoxImpl(blob);
 	}
 	
 	/**
 	 * 
-	 * Creates a STEP message from serialized MsgPack blob
+	 * Creates a message from serialized MsgPack blob
 	 * 
 	 * @param buffer - input buffer
 	 * @param offset - position in the buffer
@@ -62,19 +62,19 @@ public final class MessageFactory {
 	 * @return not null instance
 	 */
 	
-	public static final MessageBox parseMessage(byte[] buffer, int offset, int length) {
+	public static final MessageBox parseBox(byte[] buffer, int offset, int length) {
 		return new MessageBoxImpl(buffer, offset, length);
 	}
 	
 	/**
-	 * Creates a STEP message from serialized MsgPack blob
+	 * Creates a message from serialized MsgPack blob
 	 * 
 	 * @param buffer - input buffer
 	 * 
 	 * @return not null instance
 	 */
 	
-	public static final MessageBox parseMessage(ByteBuffer buffer) {
+	public static final MessageBox parseBox(ByteBuffer buffer) {
 		return new MessageBoxImpl(buffer);
 	}
 	
